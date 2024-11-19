@@ -1,38 +1,59 @@
-# Set working directory
-setwd("C:/Users/HP/Desktop/GIS WORK/GIS folder1")
-
-# Load required packages
-library(tidyverse)
-library(sf)
+# Load necessary libraries
 library(ggplot2)
+library(biscale)
+library(cowplot)
+library(sf)
 
-# Column names for the cities file
-col_names = c("geonameid", "name", "asciiname", "alternatenames", "latitude", "longitude", 
-              "feature class", "feature code", "country code", "cc2", "admin1 code", "admin2 code", 
-              "admin3 code", "admin4 code", "population", "elevation", "dem", "timezone", "modification date")
+# Classify the temperature and precipitation data into bivariate classes
+data <- bi_class(temp_ppt_df,
+                 x = temp, 
+                 y = ppt, 
+                 style = "quantile", 
+                 dim = 4)
 
-# Read the cities file using here() to ensure the path is correct
-cities <- read_csv("C:/Users/HP/Desktop/cities/practice.csv", col_names = col_names)  # Corrected to CSV file
+# Remove rows with missing values in bi_class
+data_clean <- na.omit(data)
 
-# Clean the data by converting relevant columns to numeric
-cities_clean <- cities %>%
-  mutate(
-    latitude = as.numeric(latitude),
-    longitude = as.numeric(longitude)
-  ) %>%
-  filter(!is.na(latitude) & !is.na(longitude))  # Remove rows with missing coordinates
+# Set the color palette for the bivariate map
+pallet <- "BlueOr"
 
-# Check cleaned data (optional step)
-head(cities_clean)
+# Create the bivariate map using ggplot2
+map <- ggplot(data_clean) +
+  theme_void(base_size = 14) +  # Set a minimal theme for the map
+  coord_fixed() +  # Maintain a fixed aspect ratio
+  geom_raster(aes(x = x, y = y, fill = bi_class), data = data_clean, show.legend = FALSE) +
+  bi_scale_fill(pal = pallet, dim = 4, flip_axes = FALSE, rotate_pal = FALSE) +
+  geom_sf(data = nigeria1, fill = NA, color = "black", size = 0.20) +  
+  geom_sf(data = nigeria0, fill = NA, color = "black", size = 0.40) +  
+  labs(title = "Nigeria: Temperature and Precipitation Patterns", 
+       subtitle = "Mean temperature and precipitation patterns based on 50 years of data.",
+       caption = "Source: Terra Climate Data     Author: Taiwo Kayode") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5),
+        plot.caption = element_text(size = 10, face = "bold", hjust = 0.5),
+        plot.margin = margin(1, 1, 1, 1, "cm"))  # Adjust margins as needed
 
-# Convert cities data to spatial data frame
-cities_sf <- st_as_sf(cities_clean, coords = c("longitude", "latitude"), crs = 4326)
+# Create the legend for the bivariate map
+legend <- bi_legend(pal = pallet,   
+                    flip_axes = FALSE,
+                    rotate_pal = FALSE,
+                    dim = 4,
+                    xlab = "Temperature (°C)",
+                    ylab = "Precipitation (mm)",
+                    size = 10)
 
-# Visualize the data with ggplot
-ggplot(cities_sf) +
-  geom_sf(size = 0.5, color = "orange", alpha = 0.5) +
-  labs(title = "Cities Data - Cleaned") +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(hjust = 0.5)
-  )
+# Combine the map and legend using cowplot
+finalPlot <- ggdraw() +
+  draw_plot(map, 0.05, 0.05, 0.85, 0.85) +  # Adjusted position and size
+  draw_plot(legend, 0.05, 0.05, 0.30, 0.30)  # Draw the legend in the specified position
+
+# Display the final map with legend
+print(finalPlot)
+
+# Save the final plot
+ggsave("C:/Users/HP/Desktop/Nigeria_Temp_PPT.png", 
+       plot = finalPlot,   # The plot object you want to save
+       device = "png",     # Specify the device to use, in this case PNG
+       dpi = 400,          # Set the resolution (dots per inch)
+       width = 10,         # Width in inches
+       height = 8)         # Height in inches
